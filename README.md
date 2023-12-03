@@ -1,4 +1,8 @@
-# Ferium
+# Nerium
+
+Neboer's Ferium Remake
+
+add export function to ferium project.
 
 [![rust badge](https://img.shields.io/static/v1?label=Made%20with&message=Rust&logo=rust&labelColor=e82833&color=b11522)](https://www.rust-lang.org)
 [![licence badge](https://img.shields.io/github/license/gorilla-devs/ferium)](https://github.com/gorilla-devs/ferium/blob/main/LICENSE.txt)
