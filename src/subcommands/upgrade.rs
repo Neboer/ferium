@@ -5,6 +5,7 @@ use crate::{
     download::{clean, download},
     CROSS, STYLE_NO, TICK, YELLOW_TICK,
 };
+use crate::database::Database;
 use anyhow::{anyhow, bail, Result};
 use colored::Colorize;
 use ferinth::Ferinth;
@@ -58,6 +59,13 @@ pub async fn get_platform_downloadables(
         .max()
         .unwrap_or(20)
         .clamp(20, 50);
+    let db = Database::create_database()?;
+    match &db.file_path {
+        Some(file_path) => println!("download result will write to database file {}", &file_path.to_str().unwrap()),
+        None => println!("File is None"),
+    }
+
+    let db_arc = Arc::new(Mutex::new(db));
     for mod_ in &profile.mods {
         let permit = semaphore.clone().acquire_owned().await?;
         let to_download = to_download.clone();
@@ -67,6 +75,8 @@ pub async fn get_platform_downloadables(
         let profile = profile.clone();
         let github = github.clone();
         let mod_ = mod_.clone();
+        let db_mutex_ = Arc::clone(&db_arc);
+
         tasks.spawn(async move {
             let _permit = permit;
             let result = get_latest_compatible_downloadable(
@@ -82,6 +92,11 @@ pub async fn get_platform_downloadables(
             progress_bar.inc(1);
             match result {
                 Ok((downloadable, qf_flag)) => {
+                    let download_filename = downloadable.filename();
+
+                    let mut db_ = db_mutex_.lock().unwrap();
+                    db_.add_data([mod_.name.clone(), download_filename.clone()])?;
+
                     progress_bar.println(format!(
                         "{} {:pad_len$}  {}",
                         if qf_flag {
@@ -90,7 +105,7 @@ pub async fn get_platform_downloadables(
                             TICK.clone()
                         },
                         mod_.name,
-                        downloadable.filename().dimmed()
+                        download_filename.dimmed()
                     ));
                     {
                         to_download
@@ -109,6 +124,7 @@ pub async fn get_platform_downloadables(
                         progress_bar.finish_and_clear();
                         bail!(err);
                     }
+
                     progress_bar.println(format!(
                         "{}",
                         format!("{CROSS} {:pad_len$}  {err}", mod_.name).red()
@@ -118,6 +134,7 @@ pub async fn get_platform_downloadables(
             }
         });
     }
+    // db_mutex.lock().unwrap().close_database()?;
 
     let mut error = false;
     let mut qf_flag = false;
@@ -126,6 +143,13 @@ pub async fn get_platform_downloadables(
         error |= res.0;
         qf_flag |= res.1;
     }
+
+    // all downloads are completed
+    Arc::try_unwrap(db_arc)
+        .map_err(|_| anyhow!("Failed to run threads to completion"))?
+        .into_inner().unwrap().close_database()?;
+
+
     Arc::try_unwrap(progress_bar)
         .map_err(|_| anyhow!("Failed to run threads to completion"))?
         .into_inner()?

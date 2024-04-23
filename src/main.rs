@@ -23,6 +23,7 @@
 mod cli;
 mod download;
 mod subcommands;
+pub mod database;
 
 use anyhow::{anyhow, bail, Result};
 use clap::{CommandFactory, Parser};
