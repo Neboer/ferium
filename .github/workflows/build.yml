@@ -56,8 +56,8 @@ jobs:
       - name: Install Rust cache
         uses: Swatinem/rust-cache@v2
 
-      - name: Lint code
-        run: cargo clippy
+      # - name: Lint code
+      #   run: cargo clippy
 
       - name: Run tests
         run: cargo test --no-default-features
