@@ -1,11 +1,11 @@
 // Allow `expect()`s for mutex poisons
 #![allow(clippy::expect_used)]
 
+use crate::database::Database;
 use crate::{
     download::{clean, download},
     CROSS, STYLE_NO, TICK, YELLOW_TICK,
 };
-use crate::database::Database;
 use anyhow::{anyhow, bail, Result};
 use colored::Colorize;
 use ferinth::Ferinth;
@@ -59,11 +59,7 @@ pub async fn get_platform_downloadables(
         .max()
         .unwrap_or(20)
         .clamp(20, 50);
-    let db = Database::create_database()?;
-    match &db.file_path {
-        Some(file_path) => println!("download result will write to database file {}", &file_path.to_str().unwrap()),
-        None => println!("File is None"),
-    }
+    let db = Database::new(profile.output_dir.clone().join("mods_data.tsv"));
 
     let db_arc = Arc::new(Mutex::new(db));
     for mod_ in &profile.mods {
@@ -87,15 +83,20 @@ pub async fn get_platform_downloadables(
                 &profile.game_version,
                 profile.mod_loader,
             )
-            .await;
+                .await;
             let progress_bar = progress_bar.lock().expect("Mutex poisoned");
             progress_bar.inc(1);
             match result {
                 Ok((downloadable, qf_flag)) => {
                     let download_filename = downloadable.filename();
-
+                    // let mod_side_data = 
+                    //     modrinth.get_project(mod_.identifier);
+                    
                     let mut db_ = db_mutex_.lock().unwrap();
-                    db_.add_data([mod_.name.clone(), download_filename.clone()])?;
+                    
+                    db_.as_mut().expect("none")
+                        .add_data([mod_.name.clone(), download_filename.clone()])
+                        .expect("Insert data into database failed.");
 
                     progress_bar.println(format!(
                         "{} {:pad_len$}  {}",
@@ -147,8 +148,9 @@ pub async fn get_platform_downloadables(
     // all downloads are completed
     Arc::try_unwrap(db_arc)
         .map_err(|_| anyhow!("Failed to run threads to completion"))?
-        .into_inner().unwrap().close_database()?;
-
+        .into_inner()
+        .unwrap()?
+        .close_database().expect("Database cannot be closed.");
 
     Arc::try_unwrap(progress_bar)
         .map_err(|_| anyhow!("Failed to run threads to completion"))?
